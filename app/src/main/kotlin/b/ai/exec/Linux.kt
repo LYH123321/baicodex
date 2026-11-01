@@ -201,8 +201,10 @@ object Linux {
             append(inner)
         }
         val local = exec(args, timeoutMs)
-        if (local.code == 0 || !(local.out.contains("proot error") || local.out.contains("CANNOT LINK"))) return local
-        //App 身份起不来 proot：内核解析不到 guest ELF 的解释器（/lib/ld-linux-aarch64.so.1 在宿主没有），退回当前模式的特权通道
+        if (local.code == 0) return local
+        //App 身份起不来 proot：报错、或干脆空输出静默失败时，都退回当前模式的特权通道
+        val needsFallback = local.out.contains("proot error") || local.out.contains("CANNOT LINK") || local.out.isBlank()
+        if (!needsFallback) return local
         val rr = privilegedRun(args, timeoutMs)
         if (rr.code == 0 || !rr.out.contains("proot error")) return rr
         return ShellResult(rr.code, rr.out + "\n[linux] 内置 Ubuntu 需要 root / Shizuku：App 身份无法执行 guest 里的程序")
