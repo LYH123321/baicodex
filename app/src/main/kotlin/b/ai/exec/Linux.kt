@@ -202,8 +202,8 @@ object Linux {
         }
         val local = exec(args, timeoutMs)
         if (local.code == 0 || !(local.out.contains("proot error") || local.out.contains("CANNOT LINK"))) return local
-        //App 身份起不来 proot：内核解析不到 guest ELF 的解释器（/lib/ld-linux-aarch64.so.1 在宿主没有），实测只有 Root 通道能起
-        val rr = Root.run(args, timeoutMs)
+        //App 身份起不来 proot：内核解析不到 guest ELF 的解释器（/lib/ld-linux-aarch64.so.1 在宿主没有），退回当前模式的特权通道
+        val rr = privilegedRun(args, timeoutMs)
         if (rr.code == 0 || !rr.out.contains("proot error")) return rr
         return ShellResult(rr.code, rr.out + "\n[linux] 内置 Ubuntu 需要 root / Shizuku：App 身份无法执行 guest 里的程序")
     } //在 proot 里执行
@@ -353,10 +353,17 @@ object Linux {
         }.getOrDefault(false)
     } //assets 拷到私有目录
 
-    /** 先自己跑（不依赖 Root）；本地起不来（比如没有 exec 权限）再退回 Root 通道 */
+    /** 先自己跑（不依赖 Root）；本地起不来（比如没有 exec 权限）再按工作方式退回对应特权通道 */
+    private fun privilegedRun(cmd: String, timeoutMs: Long, onLine: ((String) -> Unit)? = null): ShellResult =
+        when (Cfg.workMode) {
+            WorkMode.ROOT -> Root.run(cmd, timeoutMs)
+            WorkMode.SHIZUKU -> Shiz.run(cmd, timeoutMs = timeoutMs)
+            else -> Shell.run(cmd, timeoutMs = timeoutMs)
+        }
+
     private fun exec(cmd: String, timeoutMs: Long, onLine: ((String) -> Unit)? = null): ShellResult =
         blocked() ?: localExec(arrayOf("/system/bin/sh", "-c", cmd), timeoutMs, onLine)
-            .takeIf { it.code != NO_LOCAL } ?: Root.run(cmd, timeoutMs)
+            .takeIf { it.code != NO_LOCAL } ?: privilegedRun(cmd, timeoutMs, onLine)
 
     /** 用 ProcessBuilder 直接起进程：toybox tar / proot 都在系统或 native 目录，应用自己就能执行 */
     private fun localExec(argv: Array<String>, timeoutMs: Long, onLine: ((String) -> Unit)? = null): ShellResult {
