@@ -374,11 +374,12 @@ object Linux {
         }.getOrDefault(false)
     } //assets 拷到私有目录
 
-    /** 先自己跑（不依赖 Root）；本地起不来（比如没有 exec 权限）再按工作方式退回对应特权通道 */
+    /** 先自己跑（不依赖 Root）；本地起不来（比如没有 exec 权限）再按工作方式退回对应特权通道。
+ *  Shizuku 是 shell 身份读不了应用私有目录，必须用 run-as 包回 App 身份（debug 包可用）。 */
     private fun privilegedRun(cmd: String, timeoutMs: Long, onLine: ((String) -> Unit)? = null): ShellResult =
         when (Cfg.workMode) {
             WorkMode.ROOT -> Root.run(cmd, timeoutMs)
-            WorkMode.SHIZUKU -> Shiz.run(cmd, timeoutMs = timeoutMs)
+            WorkMode.SHIZUKU -> Shiz.run("run-as ${App.self.packageName} sh -c '${cmd.replace("'", "'\\''")}'", timeoutMs = timeoutMs)
             else -> Shell.run(cmd, timeoutMs = timeoutMs)
         }
 
