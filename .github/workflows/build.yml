@@ -29,11 +29,11 @@ jobs:
 
       - name: Fetch quickjs sources
         run: |
-          curl -sL -o /tmp/qjs.tar.gz https://github.com/quickjs-ng/quickjs/archive/refs/heads/master.tar.gz
+          curl -sL -o /tmp/qjs.tar.gz https://github.com/quickjs-ng/quickjs/archive/refs/tags/v0.9.0.tar.gz
           mkdir -p app/src/main/cpp/_third_party/quickjs
           tar -xzf /tmp/qjs.tar.gz -C /tmp
-          for f in quickjs.c dtoa.c libregexp.c libunicode.c cutils.c quickjs.h libregexp.h libunicode.h cutils.h list.h; do
-            cp /tmp/quickjs-master/$f app/src/main/cpp/_third_party/quickjs/ 2>/dev/null || true
+          for f in quickjs.c dtoa.c libregexp.c libunicode.c cutils.c quickjs.h libregexp.h libunicode.h cutils.h list.h quickjs-c-atomics.h; do
+            cp /tmp/quickjs-0.9.0/$f app/src/main/cpp/_third_party/quickjs/ 2>/dev/null || true
           done
           ls app/src/main/cpp/_third_party/quickjs
 
