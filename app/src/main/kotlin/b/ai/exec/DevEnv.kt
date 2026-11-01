@@ -93,8 +93,8 @@ object DevEnv {
             onLog("apt-get install -y ${pkgs.joinToString(" ")}")
             val r = Linux.run(
 "export DEBIAN_FRONTEND=noninteractive; " +
-"dpkg --configure -a >/dev/null 2>&1; " +  //清理可能残留的 dpkg 锁
-"apt-get -o Acquire::http::Timeout=30 -o Acquire::Retries=3 -o Acquire::ForceIPv4=true install -y --no-install-recommends ${pkgs.joinToString(" ")}"
+"dpkg --configure -a >/dev/null 2>&1; " +
+"apt-get -o Acquire::http::Timeout=30 -o Acquire::Retries=3 -o Acquire::ForceIPv4=true install -y --no-install-recommends ${pkgs.joinToString(" ")}",
                 1_800_000L
             )
             lastLog = r.out.takeLast(1200)
