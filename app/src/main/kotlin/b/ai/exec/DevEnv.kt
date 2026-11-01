@@ -76,6 +76,13 @@ object DevEnv {
             //先做一次通道诊断：proot 能不能在应用身份下起、能不能读到 rootfs
             val diag = Linux.run("id; echo DIAG_OK; uname -m", 60_000L)
             onLog("通道诊断：exit=${diag.code} out=${diag.out.take(150).ifBlank { "<空>" }}")
+            //预构建 rootfs：组件可能已经全部就位，直接探测跳过 apt
+            val ready = all.all { it.probe(Linux.rootfs) }
+            if (ready) {
+                onLog("所有组件已预装就绪（预构建镜像），无需安装")
+                onLog("全部就绪：" + all.joinToString(" ") { "${it.name}=OK" })
+                return true
+            }
             //先保证 DNS 可用：rootfs 可能没写 resolv.conf，apt 会全部解析失败
             val dns = Linux.run(
                 "mkdir -p /etc; printf 'nameserver 8.8.8.8\\nnameserver 1.1.1.1\\n' > /etc/resolv.conf; cat /etc/resolv.conf",
