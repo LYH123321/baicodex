@@ -200,13 +200,26 @@ object Linux {
             append("-w /root ")
             append(inner)
         }
-        val local = exec(args, timeoutMs)
+                val local = exec(args, timeoutMs)
         if (local.code == 0) return local
         //App 身份起不来 proot：报错、或干脆空输出静默失败时，都退回当前模式的特权通道；并把原始报错带上
         val needsFallback = local.out.contains("proot error") || local.out.contains("CANNOT LINK") || local.out.isBlank()
         if (!needsFallback) return local
         val rr = privilegedRun(args, timeoutMs)
         if (rr.code == 0) return rr
+        //Permission denied 多半是 rootfs 文件标签/执行位不对：自动补一次再重试
+        if (rr.out.contains("Permission denied") || local.out.contains("Permission denied")) {
+            relabel()
+            val retry = exec(args, timeoutMs)
+            if (retry.code == 0) return retry
+            val rr2 = privilegedRun(args, timeoutMs)
+            if (rr2.code == 0) return rr2
+            return ShellResult(
+                rr2.code,
+                rr2.out.ifBlank { "[linux] 修复标签后仍失败\n本地原始输出: ${local.out.take(300)}" } +
+                    "\n[linux] 内置 Ubuntu 需要 root / Shizuku：App 身份无法执行 guest 里的程序"
+            )
+        }
         return ShellResult(
             rr.code,
             rr.out.ifBlank { "[linux] 本地与特权通道均无输出（proot 疑似加载失败）\n本地原始输出: ${local.out.take(300)}" } +
@@ -312,8 +325,10 @@ object Linux {
     /** root 通道解包的文件 label 是裸 s0，MLS 下的 execute 要求进程与文件 level 相等，所以补成 app_data_file + 自己的分类 */
     private fun relabel(): Boolean {
         val ctx = "u:object_r:app_data_file:${mls()}"
-        val cmd = "chcon -h -R '$ctx' '${rootfs.absolutePath}' '${libs().absolutePath}' '${tmp().absolutePath}' '${loader().absolutePath}'"
-        return Root.run(cmd, 300_000L).code == 0
+        //补执行位 + SELinux 标签：解包（尤其经 tar）可能丢 x 位；标签不对 execve 会被 SELinux 拒
+        val cmd = "chmod -R u+rwX '${rootfs.absolutePath}' 2>/dev/null; " +
+            "chcon -h -R '$ctx' '${rootfs.absolutePath}' '${libs().absolutePath}' '${tmp().absolutePath}' '${loader().absolutePath}'"
+        return privilegedRun(cmd, 300_000L).code == 0
     } //修正 rootfs 的 SELinux 标签
 
     /** proot 改写 guest ELF 的解释器时要用 loader；libproot.so 里硬编的是 Termux 的路径，其他应用读不到，这里给它一份自己的 */
