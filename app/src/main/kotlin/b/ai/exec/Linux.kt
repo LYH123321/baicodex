@@ -202,12 +202,16 @@ object Linux {
         }
         val local = exec(args, timeoutMs)
         if (local.code == 0) return local
-        //App 身份起不来 proot：报错、或干脆空输出静默失败时，都退回当前模式的特权通道
+        //App 身份起不来 proot：报错、或干脆空输出静默失败时，都退回当前模式的特权通道；并把原始报错带上
         val needsFallback = local.out.contains("proot error") || local.out.contains("CANNOT LINK") || local.out.isBlank()
         if (!needsFallback) return local
         val rr = privilegedRun(args, timeoutMs)
-        if (rr.code == 0 || !rr.out.contains("proot error")) return rr
-        return ShellResult(rr.code, rr.out + "\n[linux] 内置 Ubuntu 需要 root / Shizuku：App 身份无法执行 guest 里的程序")
+        if (rr.code == 0) return rr
+        return ShellResult(
+            rr.code,
+            rr.out.ifBlank { "[linux] 本地与特权通道均无输出（proot 疑似加载失败）\n本地原始输出: ${local.out.take(300)}" } +
+                "\n[linux] 内置 Ubuntu 需要 root / Shizuku：App 身份无法执行 guest 里的程序"
+        )
     } //在 proot 里执行
 
     /** 自检：能不能起来、apt 在不在 */

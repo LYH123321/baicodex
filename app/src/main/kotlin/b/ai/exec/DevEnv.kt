@@ -73,6 +73,9 @@ object DevEnv {
                 onLog("没勾选任何组件")
                 return false
             }
+            //先做一次通道诊断：proot 能不能在应用身份下起、能不能读到 rootfs
+            val diag = Linux.run("id; echo DIAG_OK; uname -m", 60_000L)
+            onLog("通道诊断：exit=${diag.code} out=${diag.out.take(150).ifBlank { "<空>" }}")
             //先保证 DNS 可用：rootfs 可能没写 resolv.conf，apt 会全部解析失败
             val dns = Linux.run(
                 "mkdir -p /etc; printf 'nameserver 8.8.8.8\\nnameserver 1.1.1.1\\n' > /etc/resolv.conf; cat /etc/resolv.conf",
