@@ -49,6 +49,7 @@ import b.ai.net.Consent
 import b.ai.core.WorkMode
 import b.ai.core.Workflows
 import b.ai.exec.Linux
+import b.ai.exec.DevEnv
 import b.ai.exec.Root
 import b.ai.exec.Router
 import b.ai.exec.Shiz
@@ -377,6 +378,9 @@ private fun StepEnv() {
     var self by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
     val canRun = Linux.canRun()
+    //环境配置（Operit 移植）：组件勾选状态
+    var envStatus by remember { mutableStateOf(DevEnv.status()) }
+    var envBusy by remember { mutableStateOf(DevEnv.running) }
     CardBox {
         Text(stringResource(R.string.ob2_linux_q), fontSize = 14.sp, color = TextPrimary)
         Spacer(Modifier.height(6.dp))
@@ -418,7 +422,10 @@ private fun StepEnv() {
                     }
                     busy = false
                     ready = ok && Linux.installed()
-                    if (ready) self = withContext(Dispatchers.IO) { Linux.selfTest().out }
+                    if (ready) {
+                        self = withContext(Dispatchers.IO) { Linux.selfTest().out }
+                        envStatus = DevEnv.status()
+                    }
                 }
             }
             if (ready && !busy) {
@@ -436,5 +443,81 @@ private fun StepEnv() {
             Spacer(Modifier.height(8.dp))
             Text(self, fontSize = 11.sp, color = TextPrimary, fontFamily = FontFamily.Monospace)
         }
+        //===== 以下为 Operit 移植的环境配置区：Ubuntu 就绪后显示组件勾选 =====
+        if (ready) {
+            Spacer(Modifier.height(14.dp))
+            Text("环境配置", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+            Text("选择要安装的开发组件（移植自 Operit）", fontSize = 11.sp, color = TextSecondary)
+            Spacer(Modifier.height(8.dp))
+            Row(
+                Modifier.fillMaxWidth().tap {
+                    if (!envBusy) {
+                        val allSel = envStatus.all { it.selected }
+                        envStatus = envStatus.map { it.copy(selected = !allSel) }
+                    }
+                },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    Modifier
+                        .size(15.dp)
+                        .liquidBg(RoundedCornerShape(5.dp), tint = if (envStatus.all { it.selected }) AccentBlue else SurfaceMuted),
+                    contentAlignment = Alignment.Center
+                ) { if (envStatus.all { it.selected }) IcTick(Color.White, 9.dp) }
+                Spacer(Modifier.width(8.dp))
+                Text("全选", fontSize = 12.sp, color = TextPrimary)
+            }
+            Spacer(Modifier.height(6.dp))
+            envStatus.forEach { st ->
+                Row(
+                    Modifier.fillMaxWidth().tap {
+                        if (!envBusy) {
+                            envStatus = envStatus.map {
+                                if (it.comp.id == st.comp.id) it.copy(selected = !it.selected) else it
+                            }
+                        }
+                    },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        Modifier
+                            .size(15.dp)
+                            .liquidBg(RoundedCornerShape(5.dp), tint = if (st.selected || st.installed) AccentBlue else SurfaceMuted),
+                        contentAlignment = Alignment.Center
+                    ) { if (st.selected || st.installed) IcTick(Color.White, 9.dp) }
+                    Spacer(Modifier.width(8.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(st.comp.name, fontSize = 13.sp, color = TextPrimary)
+                        Text(
+                            if (st.installed) "已安装" else st.comp.note,
+                            fontSize = 10.sp,
+                            color = if (st.installed) OkGreen else TextSecondary
+                        )
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+            }
+            Spacer(Modifier.height(8.dp))
+            Row {
+                PrimaryButton(
+                    text = if (envBusy) "正在配置环境…" else "开始配置",
+                    enabled = !envBusy && envStatus.any { it.selected }
+                ) {
+                    if (envBusy) return@PrimaryButton
+                    envBusy = true
+                    log = ""
+                    val ids = envStatus.filter { it.selected }.map { it.comp.id }
+                    scope.launch {
+                        withContext(Dispatchers.IO) {
+                            DevEnv.install(ids) { line ->
+                                log = (log + line + "\n").takeLast(1500)
+                            }
+                        }
+                        envStatus = DevEnv.status()
+                        envBusy = false
+                    }
+                }
+            }
+        }
     }
-} //装环境步骤：可选装内置 Ubuntu，不装直接下一步
+} //装环境步骤：可选装内置 Ubuntu，装完可继续勾选配置 Node/Python/Java 等开发组件
