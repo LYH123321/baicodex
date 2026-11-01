@@ -73,10 +73,20 @@ object DevEnv {
                 onLog("没勾选任何组件")
                 return false
             }
+            //先保证 DNS 可用：rootfs 可能没写 resolv.conf，apt 会全部解析失败
+            val dns = Linux.run(
+                "mkdir -p /etc; printf 'nameserver 8.8.8.8\\nnameserver 1.1.1.1\\n' > /etc/resolv.conf; cat /etc/resolv.conf",
+                30_000L
+            )
+            onLog("DNS 配置：${dns.out.takeLast(120)}")
             val pkgs = all.flatMap { it.pkgs }.distinct()
             onLog("开始配置：${all.joinToString("、") { it.name }}（${pkgs.size} 个包，并行探测 + 串行安装）")
             val u = Linux.run("export DEBIAN_FRONTEND=noninteractive; apt-get update -y", 900_000L)
-            if (!u.ok) onLog("apt update 退出码 ${u.code}，继续尝试安装")
+            if (!u.ok) {
+                onLog("apt update 退出码 ${u.code}，输出末尾：")
+                onLog(u.out.takeLast(600))
+                onLog("继续尝试安装")
+            }
             onLog("apt-get install -y ${pkgs.joinToString(" ")}")
             val r = Linux.run(
                 "export DEBIAN_FRONTEND=noninteractive; " +
@@ -85,6 +95,10 @@ object DevEnv {
             )
             lastLog = r.out.takeLast(1200)
             onLog(lastLog)
+            if (!r.ok) {
+                onLog("apt install 退出码 ${r.code}，输出末尾：")
+                onLog(r.out.takeLast(800))
+            }
             val rf = rootfs()
             val report = all.map { "${it.name}=${if (it.probe(rf)) "OK" else "未装上"}" }
             val ok = all.all { it.probe(rf) }
