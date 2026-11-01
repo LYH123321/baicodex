@@ -36,6 +36,13 @@ jobs:
             cp /tmp/quickjs-5beca15a783c7be6b2a29a2223b49d0733ba0ece/$f app/src/main/cpp/_third_party/quickjs/ 2>/dev/null || true
           done
           ls app/src/main/cpp/_third_party/quickjs
+      - name: Fetch prebuilt OpenSSL (KDAB android_openssl)
+        run: |
+          curl -sL -o /tmp/oss.tar.gz https://github.com/KDAB/android_openssl/archive/refs/heads/master.tar.gz
+          tar -xzf /tmp/oss.tar.gz -C /tmp
+          mkdir -p app/src/main/cpp/_third_party/android_openssl-master
+          cp -r /tmp/android_openssl-master/ssl_3 app/src/main/cpp/_third_party/android_openssl-master/
+          ls app/src/main/cpp/_third_party/android_openssl-master/ssl_3/arm64-v8a
 
       - name: Build debug APK
         run: |
