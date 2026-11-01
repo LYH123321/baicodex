@@ -100,7 +100,7 @@ std::string Engine::exceptionText() {
     JSValue e = JS_GetException(ctx_);
     const std::string msg = toStd(ctx_, e);
     std::string stack;
-    if (JS_IsError(ctx_, e)) {
+    if (JS_IsError(e)) {
         JSValue st = JS_GetPropertyStr(ctx_, e, "stack");
         if (!JS_IsUndefined(st)) stack = toStd(ctx_, st);
         JS_FreeValue(ctx_, st);
