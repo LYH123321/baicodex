@@ -498,6 +498,10 @@
     <string name="se_046">搜索平台</string>
     <string name="se_tv_t">酒馆 SillyTavern</string>
     <string name="se_tv_d">本地酒馆一键启动/停止，浏览器打开 http://127.0.0.1:8000/</string>
+    <string name="se_term_t">终端</string>
+    <string name="se_term_d">在内置 Ubuntu 里执行命令，黑底回显，支持 ls / df -h / apt 等常用命令</string>
+    <string name="se_ofm_t">免费模型网关 Our Free Model</string>
+    <string name="se_ofm_d">一键启动本地 OpenAI 兼容网关（免 key 免费模型），模型设置里 base_url 填 http://127.0.0.1:18900/v1</string>
     <string name="se_lf_t">硬链接修复（linkfix）</string>
     <string name="se_lf_d">Android 禁止应用创建硬链接，会让 npm/dpkg 在原子写时出错。开启后不再用 --link2symlink 冒充，出问题可关掉回退。</string>
     <string name="se_lf_on">linkfix 已启用：proot 不再使用 --link2symlink</string>

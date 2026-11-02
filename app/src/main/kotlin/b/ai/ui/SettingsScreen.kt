@@ -63,6 +63,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
@@ -103,6 +104,8 @@ import b.ai.core.SkillPack
 import b.ai.core.Wallpaper
 import b.ai.core.WorkMode
 import b.ai.exec.Shiz
+import b.ai.exec.Linux
+import b.ai.exec.Ofm
 import b.ai.exec.Alarms
 import b.ai.exec.DevEnv
 import b.ai.exec.FChat
@@ -191,6 +194,8 @@ private val SettingIndex = listOf(
     SettingEntry(R.string.se_050, R.string.se_005, hintRaw = ""),
     SettingEntry(R.string.se_051, R.string.se_005, hintRaw = "JDK / gradle / Android SDK"),
     SettingEntry(R.string.se_tv_t, R.string.se_005, R.string.se_tv_d),
+    SettingEntry(R.string.se_term_t, R.string.se_005, R.string.se_term_d),
+    SettingEntry(R.string.se_ofm_t, R.string.se_005, R.string.se_ofm_d),
     SettingEntry(R.string.se_052, R.string.se_005, R.string.se_053),
     SettingEntry(R.string.se_054, R.string.se_006, R.string.se_055)
 ) //搜索索引
@@ -1769,6 +1774,10 @@ private fun LazyListScope.extTab(
         Spacer(Modifier.height(14.dp))
         TavernSection()
         Spacer(Modifier.height(14.dp))
+        OfmSection()
+        Spacer(Modifier.height(14.dp))
+        TerminalSection()
+        Spacer(Modifier.height(14.dp))
         LinuxSection()
         Spacer(Modifier.height(14.dp))
         EnvSection()
@@ -3137,6 +3146,117 @@ private fun LinuxSection() {
         }
     }
 } //Linux 环境安装卡
+
+/** 终端卡：在内置 Ubuntu 里执行任意命令，黑底等宽回显 */
+@Composable
+private fun TerminalSection() {
+    val scope = rememberCoroutineScope()
+    var cmd by remember { mutableStateOf("") }
+    var out by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    SectionTitle(stringResource(R.string.se_term_t), stringResource(R.string.se_term_d))
+    CardBox {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            BasicTextField(
+                value = cmd,
+                onValueChange = { cmd = it },
+                singleLine = true,
+                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = TextPrimary),
+                modifier = Modifier.weight(1f).height(38.dp).liquidBg(RoundedCornerShape(10.dp)).padding(horizontal = 10.dp),
+                decorationBox = { inner ->
+                    Box(Modifier.fillMaxWidth().padding(vertical = 9.dp)) {
+                        if (cmd.isEmpty()) Text("输入命令…", fontSize = 13.sp, color = TextSecondary)
+                        inner()
+                    }
+                }
+            )
+            GhostButton(if (busy) "…", modifier = Modifier.height(38.dp)) {
+                val c = cmd.trim()
+                if (busy || c.isEmpty()) return@GhostButton
+                busy = true
+                scope.launch {
+                    val line = "\$ $c\n"
+                    val r = withContext(Dispatchers.IO) { Linux.run(c, 120_000L) }
+                    out = (out + line + r.out.take(4000) + "\n").takeLast(8000)
+                    busy = false
+                }
+            }
+        }
+        //常用命令一键填入
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 8.dp)) {
+            listOf("uname -a", "ls ~", "df -h", "node -v").forEach { q ->
+                GhostButton(q, modifier = Modifier.height(30.dp)) { cmd = q }
+            }
+        }
+        if (out.isNotBlank()) {
+            Spacer(Modifier.height(8.dp))
+            Box(
+                Modifier.fillMaxWidth().heightIn(min = 60.dp, max = 260.dp).background(Color(0xFF101418), RoundedCornerShape(10.dp)).padding(10.dp)
+            ) {
+                Text(out, fontSize = 10.sp, color = Color(0xFF9FE29F), fontFamily = FontFamily.Monospace)
+            }
+        }
+    }
+} //终端卡
+
+@Composable
+private fun OfmSection() {
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    var log by remember { mutableStateOf("") }
+    var ok by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        ok = withContext(Dispatchers.IO) { Ofm.installed() && Ofm.alive() }
+    }
+    SectionTitle(stringResource(R.string.se_ofm_t), stringResource(R.string.se_ofm_d))
+    CardBox {
+        Text(
+            when {
+                !Ofm.installed() -> "服务本体不在（/opt/ofm 缺失）"
+                ok -> "运行中：http://127.0.0.1:18900/v1"
+                else -> "已安装，未运行"
+            },
+            fontSize = 13.sp,
+            color = when {
+                !Ofm.installed() -> TextSecondary
+                ok -> OkGreen
+                else -> TextPrimary
+            }
+        )
+        if (log.isNotBlank()) {
+            Spacer(Modifier.height(6.dp))
+            Text(log, fontSize = 10.sp, color = TextSecondary)
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            GhostButton(if (busy) "处理中…" else "启动", modifier = Modifier.height(38.dp)) {
+                if (busy) return@GhostButton
+                busy = true
+                log = "启动中…"
+                scope.launch {
+                    ok = withContext(Dispatchers.IO) { Ofm.start { l -> log = l } }
+                    busy = false
+                }
+            }
+            GhostButton("停止", modifier = Modifier.height(38.dp)) {
+                if (busy) return@GhostButton
+                busy = true
+                scope.launch {
+                    log = withContext(Dispatchers.IO) {
+                        var m = ""
+                        Ofm.stop { l -> m = l }
+                        m
+                    }
+                    ok = false
+                    busy = false
+                }
+            }
+            GhostButton("日志", modifier = Modifier.height(38.dp)) {
+                scope.launch { log = withContext(Dispatchers.IO) { Ofm.tail() } }
+            }
+        }
+    }
+} //ofm 免费模型网关卡
 
 @Composable
 private fun TavernSection() {
