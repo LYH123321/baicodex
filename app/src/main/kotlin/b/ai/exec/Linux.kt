@@ -229,7 +229,7 @@ object Linux {
 
     /** 后台拉起长驻服务（如 SillyTavern）：与 run 同一套 proot 参数，但不等待。
      *  进程挂在本应用进程下：App 被杀服务即停，适合「开着 App 才用」的本地服务 */
-    fun spawn(cmd: String): Process? {
+    fun spawn(cmd: String): java.lang.Process? {
         if (blocked() != null || !installed()) return null
         ensureTalloc()
         val ld = ensureLoader()

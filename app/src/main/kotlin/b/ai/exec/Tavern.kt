@@ -6,7 +6,7 @@ import java.io.File
  *  服务进程由 App 用 spawn() 拉起，挂在应用进程下；ST 日志落在 guest 的 /home/st/st.log */
 object Tavern {
 
-    private var proc: Process? = null
+    private var proc: java.lang.Process? = null
 
     private fun stDir() = File(Linux.rootfs, "home/st")
     private fun logFile() = File(stDir(), "st.log")
