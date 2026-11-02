@@ -46,18 +46,14 @@ object Tavern {
         proc = p
         val t0 = System.currentTimeMillis()
         while (System.currentTimeMillis() - t0 < 60_000) {
-            if (!p.isAlive) {
-                onLog("进程退出了：看日志查原因")
-                proc = null
-                return false
-            }
+            //不早退：特权通道拉起时句柄是占位进程（秒退是正常现象），服务是否就绪只看端口
             if (alive()) {
                 onLog("酒馆已就绪：http://127.0.0.1:8000/")
                 return true
             }
             Thread.sleep(2500)
         }
-        onLog("60 秒内没监听上：点「日志」看 st.log 排查")
+        onLog("60 秒内没监听上：点「日志」看 st.log 排查（诊断详情在 /sdcard/BaiAgent/spawn_dbg.log）")
         return false
     }
 
