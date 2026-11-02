@@ -190,6 +190,7 @@ private val SettingIndex = listOf(
     SettingEntry(R.string.mcp_title, R.string.se_005, R.string.mcp_sub),
     SettingEntry(R.string.se_050, R.string.se_005, hintRaw = ""),
     SettingEntry(R.string.se_051, R.string.se_005, hintRaw = "JDK / gradle / Android SDK"),
+    SettingEntry(R.string.se_tv_t, R.string.se_005, R.string.se_tv_d),
     SettingEntry(R.string.se_052, R.string.se_005, R.string.se_053),
     SettingEntry(R.string.se_054, R.string.se_006, R.string.se_055)
 ) //搜索索引
@@ -1766,9 +1767,9 @@ private fun LazyListScope.extTab(
     }
     item {
         Spacer(Modifier.height(14.dp))
-        LinuxSection()
-        Spacer(Modifier.height(14.dp))
         TavernSection()
+        Spacer(Modifier.height(14.dp))
+        LinuxSection()
         Spacer(Modifier.height(14.dp))
         EnvSection()
     }
@@ -3126,7 +3127,7 @@ private fun TavernSection() {
     LaunchedEffect(Unit) {
         ok = withContext(Dispatchers.IO) { Tavern.installed() && Tavern.alive() }
     }
-    SectionTitle("酒馆 SillyTavern", "本地跑的酒馆：启动后浏览器打开 http://127.0.0.1:8000/")
+    SectionTitle(stringResource(R.string.se_tv_t), stringResource(R.string.se_tv_d))
     CardBox {
         Text(
             when {

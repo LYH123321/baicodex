@@ -496,6 +496,8 @@
     <string name="se_044">定时任务</string>
     <string name="se_045">到点通知与自动执行</string>
     <string name="se_046">搜索平台</string>
+    <string name="se_tv_t">酒馆 SillyTavern</string>
+    <string name="se_tv_d">本地酒馆一键启动/停止，浏览器打开 http://127.0.0.1:8000/</string>
     <string name="se_047">智能体角色</string>
     <string name="se_048">自定义系统提示</string>
     <string name="se_049">技能专区</string>

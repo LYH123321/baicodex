@@ -25,8 +25,8 @@ android {
         applicationId = "b.ai"
         minSdk = 24
         targetSdk = 34
-        versionCode = 26
-        versionName = "1.9.2"
+        versionCode = 27
+        versionName = "1.9.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {
@@ -48,6 +48,16 @@ android {
         abortOnError = false
     } //关掉 lintVital 检查
 
+    //固定签名：以前每次 CI 都用新生成的 debug 调试密钥，导致每次装新版都签名冲突、必须卸载重装（App 私有数据被清空）
+    //现在统一用仓库里这份 keystore，覆盖安装即可升级，rootfs/酒馆数据都保得住
+    signingConfigs {
+        create("bai") {
+            storeFile = file("baicodex.jks")
+            storePassword = "baicodex2026"
+            keyAlias = "baicodex"
+            keyPassword = "baicodex2026"
+        }
+    } //固定签名
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -56,9 +66,12 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("bai")
         }
         debug {
             isMinifyEnabled = false
+            //debug 也走同一份签名，保证 CI 产物能覆盖安装到手机上
+            signingConfig = signingConfigs.getByName("bai")
         }
     } //releaseR8
     compileOptions {
