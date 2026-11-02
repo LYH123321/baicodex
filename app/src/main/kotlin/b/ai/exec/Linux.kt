@@ -32,6 +32,7 @@ object Linux {
     private const val ASSET_LOADER = "linux/loader"
     private const val ASSET_TALLOC = "linux/libtalloc.so.2"
     private const val ASSET_TAR = "linux/rootfs.tgz"
+    private const val ASSET_LINKFIX = "linux/linkfix.so"
 
     /** 本地执行用不了时的哨兵退出码：见到它就退回 Root 通道 */
     private const val NO_LOCAL = -999
@@ -188,13 +189,16 @@ object Linux {
         }
         val inner = "/usr/bin/env -i HOME=/root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin " +
             "LANG=C.UTF-8 TERM=dumb /bin/sh -c '${cmd.replace("'", "'\\''")}'"
+        //linkfix 要在起 proot 之前挂好，否则这次还得靠 --link2symlink 顶着
+        ensureLinkfix()
         val args = buildString {
             append("LD_LIBRARY_PATH='").append(libs().absolutePath)
                 .append(":").append(nativeDir().absolutePath).append("' ")
             append("PROOT_TMP_DIR='").append(tmp().absolutePath).append("' ")
             append("PROOT_LOADER='").append(ld.absolutePath).append("' ")
             append("'").append(proot.absolutePath).append("' ")
-            append("--link2symlink -0 ")
+            append(linkArgs())
+            append("-0 ")
             append("-r '").append(rootfs.absolutePath).append("' ")
             append("-b /dev -b /proc -b /sys -b /storage -b /sdcard ")
             append("-w /root ")
@@ -233,6 +237,7 @@ object Linux {
         if (blocked() != null || !installed()) return null
         ensureTalloc()
         val ld = ensureLoader()
+        ensureLinkfix()
         val inner = "/usr/bin/env -i HOME=/root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin " +
             "LANG=C.UTF-8 TERM=dumb /bin/sh -c '${cmd.replace("'", "'\\''")}'"
         val args = buildString {
@@ -241,7 +246,8 @@ object Linux {
             append("PROOT_TMP_DIR='").append(tmp().absolutePath).append("' ")
             append("PROOT_LOADER='").append(ld.absolutePath).append("' ")
             append("'").append(proot.absolutePath).append("' ")
-            append("--link2symlink -0 ")
+            append(linkArgs())
+            append("-0 ")
             append("-r '").append(rootfs.absolutePath).append("' ")
             append("-b /dev -b /proc -b /sys -b /storage -b /sdcard ")
             append("-w /root ")
@@ -391,6 +397,58 @@ object Linux {
             copyAsset(ASSET_TALLOC, talloc)
         }
     } //补齐 libtalloc.so.2
+
+    /** guest 里 linkfix 的落点：放在 /usr/local/lib，preload 用绝对路径引它 */
+    private fun linkfixInGuest(): File = File(rootfs, "usr/local/lib/linkfix.so")
+
+    /** 把 linkfix.so 装进 guest 并挂上 /etc/ld.so.preload。
+     *  作用：Android 禁止应用进程 link()，proot 里 dpkg/npm 全都受影响。装上它之后
+     *  proot 不必再带 --link2symlink（那只是拿软链冒充，npm 原子写会留悬空软链）。
+     *  失败不致命：返回 false 时调用方继续用 --link2symlink 的老路子。 */
+    fun ensureLinkfix(): Boolean {
+        if (!Cfg.linuxLinkfix) return false
+        if (!installed()) return false
+        return runCatching {
+            val dst = linkfixInGuest()
+            val src = assetBytes(ASSET_LINKFIX)
+            //assets 里没有 .so：必须把 preload 清掉。留着它指向不存在的文件，
+            //guest 里**所有**命令都会因为加载器报错而起不来
+            if (src == null || src.isEmpty()) {
+                val pre0 = File(rootfs, "etc/ld.so.preload")
+                if (pre0.isFile) pre0.writeText("")
+                return@runCatching false
+            }
+            //每次核对体积：重装 APK 后 assets 可能更新，长度不同就重copy
+            if (!dst.isFile || dst.length() != src.size.toLong()) {
+                dst.parentFile?.mkdirs()
+                dst.writeBytes(src)
+                dst.setExecutable(true)
+            }
+            val pre = File(rootfs, "etc/ld.so.preload")
+            val want = "/usr/local/lib/linkfix.so\n"
+            if (!pre.isFile || pre.readText() != want) pre.writeText(want)
+            true
+        }.getOrDefault(false)
+    } //安装 linkfix
+
+    /** assets 读成字节；缺失返回 null（CI 没编出 .so 时不至于崩） */
+    private fun assetBytes(name: String): ByteArray? = runCatching {
+        App.self.assets.open(name).use { it.readBytes() }
+    }.getOrNull()
+
+    /** 卸掉 linkfix：清空 ld.so.preload 并删掉 .so。
+     *  必须清 preload——留着一个指向不存在文件的 preload，guest 里所有命令都会起不来 */
+    fun removeLinkfix(): Boolean = runCatching {
+        if (!installed()) return@runCatching false
+        val pre = File(rootfs, "etc/ld.so.preload")
+        if (pre.isFile) pre.writeText("")
+        linkfixInGuest().delete()
+        true
+    }.getOrDefault(false)
+
+    /** proot 的挂载/链接参数：启用 linkfix 时不再用 --link2symlink */
+    private fun linkArgs(): String =
+        if (Cfg.linuxLinkfix && linkfixInGuest().isFile) "" else "--link2symlink "
 
     private fun copyAsset(name: String, dst: File): Boolean {
         val ctx: Context = App.self

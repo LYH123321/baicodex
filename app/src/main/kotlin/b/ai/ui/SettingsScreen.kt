@@ -3115,6 +3115,26 @@ private fun LinuxSection() {
             fontSize = 10.sp,
             color = TextSecondary
         )
+        //硬链接修复：Android 禁止应用进程 link()，npm/dpkg 会在原子写时踩坑。
+        //开了之后 proot 不再用 --link2symlink，可一键关掉回退
+        Spacer(Modifier.height(10.dp))
+        CapSwitch(
+            stringResource(R.string.se_lf_t),
+            stringResource(R.string.se_lf_d),
+            Cfg.linuxLinkfix
+        ) { on ->
+            Cfg.linuxLinkfix = on
+            scope.launch {
+                val r = withContext(Dispatchers.IO) { Linux.ensureLinkfix() }
+                log = if (on) {
+                    if (r) ctx.getString(R.string.se_lf_on) else ctx.getString(R.string.se_lf_fail)
+                } else {
+                    //关掉时把 preload 清空：留着它指向已卸载的 .so，guest 里所有命令都会起不来
+                    withContext(Dispatchers.IO) { Linux.removeLinkfix() }
+                    ctx.getString(R.string.se_lf_off)
+                }
+            }
+        }
     }
 } //Linux 环境安装卡
 

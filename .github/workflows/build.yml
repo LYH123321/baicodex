@@ -28,6 +28,20 @@ jobs:
           du -sh app/src/main/assets/linux
       - name: Setup QEMU for arm64
         uses: docker/setup-qemu-action@v3
+      - name: Build linkfix.so (guest glibc, arm64)
+        run: |
+          # 关键：这个 .so 要被 guest 里的 glibc 加载，必须用同一套 glibc 编译。
+          # 用 NDK/bionic 编出来的 ABI 不符，preload 会让 guest 里所有命令崩掉。
+          docker run --platform linux/arm64 --name lf -v "$PWD/app/src/main/cpp/linkfix:/src:ro" ubuntu:24.04 bash -ec '
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update -qq
+            apt-get install -y -qq --no-install-recommends gcc libc6-dev >/dev/null
+            gcc -shared -fPIC -O2 -Wall -Wextra -o /src/linkfix.so /src/linkfix.c -ldl
+          '
+          ls -la app/src/main/cpp/linkfix/linkfix.so
+          mkdir -p app/src/main/assets/linux
+          cp app/src/main/cpp/linkfix/linkfix.so app/src/main/assets/linux/linkfix.so
+          ls -la app/src/main/assets/linux/
       - name: Build full rootfs (ubuntu 24.04 arm64 + all toolchains preinstalled)
         run: |
           docker run --platform linux/arm64 --name rf ubuntu:24.04 bash -ec '

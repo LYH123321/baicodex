@@ -585,6 +585,12 @@ object Cfg {
         get() = mem("predictive_back", true).value
         set(v) { mem("predictive_back", true).value = v; put("predictive_back", v) }
 
+    /** 内建 Ubuntu 是否启用 linkfix（拦截 link/chown/stat，绕开 Android 禁硬链接）。
+     *  开了之后 proot 不用 --link2symlink，npm/apt 不再留悬空软链；出问题可一键关掉 */
+    var linuxLinkfix: Boolean
+        get() = mem("linux_linkfix", true).value
+        set(v) { mem("linux_linkfix", true).value = v; put("linux_linkfix", v) }
+
     /** 模型价格：输入 / 输出 / 缓存命中，单位元每百万 token；0 = 不计价 */
     var priceIn: Float
         get() = mem("price_in", 0f).value
