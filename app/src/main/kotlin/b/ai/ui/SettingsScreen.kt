@@ -110,6 +110,7 @@ import b.ai.exec.Linux
 import b.ai.exec.Pet
 import b.ai.exec.PetGrant
 import b.ai.exec.Router
+import b.ai.exec.Tavern
 import b.ai.exec.Toolchain
 import b.ai.exec.Workspace
 import b.ai.net.Update
@@ -1767,6 +1768,8 @@ private fun LazyListScope.extTab(
         Spacer(Modifier.height(14.dp))
         LinuxSection()
         Spacer(Modifier.height(14.dp))
+        TavernSection()
+        Spacer(Modifier.height(14.dp))
         EnvSection()
     }
     item {
@@ -3113,6 +3116,65 @@ private fun LinuxSection() {
         )
     }
 } //Linux 环境安装卡
+
+@Composable
+private fun TavernSection() {
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    var log by remember { mutableStateOf("") }
+    var ok by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        ok = withContext(Dispatchers.IO) { Tavern.installed() && Tavern.alive() }
+    }
+    SectionTitle("酒馆 SillyTavern", "本地跑的酒馆：启动后浏览器打开 http://127.0.0.1:8000/")
+    CardBox {
+        Text(
+            when {
+                !Tavern.installed() -> "酒馆本体不在（/home/st 缺失）"
+                ok -> "运行中：http://127.0.0.1:8000/"
+                else -> "已安装，未运行"
+            },
+            fontSize = 13.sp,
+            color = when {
+                !Tavern.installed() -> TextSecondary
+                ok -> OkGreen
+                else -> TextPrimary
+            }
+        )
+        if (log.isNotBlank()) {
+            Spacer(Modifier.height(6.dp))
+            Text(log, fontSize = 10.sp, color = TextSecondary)
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            GhostButton(if (busy) "处理中…" else "启动", modifier = Modifier.height(38.dp)) {
+                if (busy) return@GhostButton
+                busy = true
+                log = "启动中…"
+                scope.launch {
+                    ok = withContext(Dispatchers.IO) { Tavern.start { l -> log = l } }
+                    busy = false
+                }
+            }
+            GhostButton("停止", modifier = Modifier.height(38.dp)) {
+                if (busy) return@GhostButton
+                busy = true
+                scope.launch {
+                    log = withContext(Dispatchers.IO) {
+                        var m = ""
+                        Tavern.stop { l -> m = l }
+                        m
+                    }
+                    ok = false
+                    busy = false
+                }
+            }
+            GhostButton("日志", modifier = Modifier.height(38.dp)) {
+                scope.launch { log = withContext(Dispatchers.IO) { Tavern.tail() } }
+            }
+        }
+    }
+} //酒馆一键启动/停止卡
 
 /** 终端式进度框：白底等宽字，顶部总进度条 + 当前步骤，日志一长就自动贴底 */
 @Composable

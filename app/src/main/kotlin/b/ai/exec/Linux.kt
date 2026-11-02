@@ -227,6 +227,35 @@ object Linux {
         )
     } //在 proot 里执行
 
+    /** 后台拉起长驻服务（如 SillyTavern）：与 run 同一套 proot 参数，但不等待。
+     *  进程挂在本应用进程下：App 被杀服务即停，适合「开着 App 才用」的本地服务 */
+    fun spawn(cmd: String): Process? {
+        if (blocked() != null || !installed()) return null
+        ensureTalloc()
+        val ld = ensureLoader()
+        val inner = "/usr/bin/env -i HOME=/root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin " +
+            "LANG=C.UTF-8 TERM=dumb /bin/sh -c '${cmd.replace("'", "'\\''")}'"
+        val args = buildString {
+            append("LD_LIBRARY_PATH='").append(libs().absolutePath)
+                .append(":").append(nativeDir().absolutePath).append("' ")
+            append("PROOT_TMP_DIR='").append(tmp().absolutePath).append("' ")
+            append("PROOT_LOADER='").append(ld.absolutePath).append("' ")
+            append("'").append(proot.absolutePath).append("' ")
+            append("--link2symlink -0 ")
+            append("-r '").append(rootfs.absolutePath).append("' ")
+            append("-b /dev -b /proc -b /sys -b /storage -b /sdcard ")
+            append("-w /root ")
+            append(inner)
+        }
+        return runCatching {
+            val p = ProcessBuilder("/system/bin/sh", "-c", args).redirectErrorStream(true).start()
+            //读掉输出流防管道堵死（输出已由 guest 内部重定向到文件，这里只是排空）
+            Thread { runCatching { p.inputStream.bufferedReader().forEachLine { } } }
+                .apply { isDaemon = true; start() }
+            p
+        }.getOrNull()
+    } //后台拉起长驻服务
+
     /** 自检：能不能起来、apt 在不在 */
     fun selfTest(): ShellResult = run(
         "uname -m; . /etc/os-release 2>/dev/null; echo \"\$PRETTY_NAME\"; " +
