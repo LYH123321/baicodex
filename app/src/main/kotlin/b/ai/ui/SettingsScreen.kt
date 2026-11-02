@@ -3169,7 +3169,7 @@ private fun TerminalSection() {
                     }
                 }
             )
-            GhostButton(if (busy) "…", modifier = Modifier.height(38.dp)) {
+            GhostButton(if (busy) "…" else "运行", modifier = Modifier.height(38.dp)) {
                 val c = cmd.trim()
                 if (busy || c.isEmpty()) return@GhostButton
                 busy = true
