@@ -253,23 +253,62 @@ object Linux {
             append("-w /root ")
             append(inner)
         }
+        val dbgTag = "---- " + java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.US)
+            .format(java.util.Date()) + " ----\n"
         return runCatching {
-            val p = ProcessBuilder("/system/bin/sh", "-c", args).redirectErrorStream(true).start()
-            //排空输出防管道堵死；同时落到诊断文件：spawn 的报错用户看不见，排障全靠它
-            val dbg = File("/sdcard/BaiAgent/spawn_dbg.log")
-            Thread {
-                runCatching {
-                    dbg.parentFile?.mkdirs()
-                    dbg.appendText("---- ${java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())} ----\n${args.take(260)}\n")
-                    p.inputStream.bufferedReader().forEachLine { line ->
-                        if (dbg.length() > 200_000) dbg.writeText("")
-                        dbg.appendText(line + "\n")
-                    }
-                }
-            }.apply { isDaemon = true; start() }
-            p
+            val p = spawnStart(args, dbgTag)
+            Thread.sleep(1200)
+            if (p.isAlive) return@runCatching p
+
+            //第一跳没活过 1.2 秒：多半是 SELinux 标签/执行位丢了（重装 APK、系统重建 uid 之后常见），
+            //补一轮标签后原地重试
+            spawnDbg(dbgTag + "[spawn] 首次拉起 1.2s 内退出，自动补标签重试\n")
+            relabel()
+            val p2 = spawnStart(args, dbgTag)
+            Thread.sleep(1200)
+            if (p2.isAlive) return@runCatching p2
+
+            //仍秒退：退回特权通道拉起（Shizuku/Root 远程 nohup，服务常驻不受本进程 exec 限制影响）
+            spawnDbg("[spawn] 本地重试仍秒退，退回特权通道拉起\n")
+            spawnStartPrivileged(args)
         }.getOrNull()
     } //后台拉起长驻服务
+
+    private fun spawnDbg(text: String) {
+        runCatching {
+            val dbg = File("/sdcard/BaiAgent/spawn_dbg.log")
+            dbg.parentFile?.mkdirs()
+            if (dbg.length() > 200_000) dbg.writeText("")
+            dbg.appendText(text)
+        }
+    }
+
+    /** 用 ProcessBuilder 直接起进程：toybox tar / proot 都在系统或 native 目录，应用自己就能执行 */
+    private fun spawnStart(args: String, dbgTag: String): java.lang.Process {
+        val p = ProcessBuilder("/system/bin/sh", "-c", args).redirectErrorStream(true).start()
+        //排空输出防管道堵死；同时落到诊断文件：spawn 的报错用户看不见，排障全靠它
+        Thread {
+            runCatching {
+                spawnDbg(dbgTag + args.take(200) + "\n")
+                p.inputStream.bufferedReader().forEachLine { line ->
+                    if (File("/sdcard/BaiAgent/spawn_dbg.log").length() > 200_000)
+                        File("/sdcard/BaiAgent/spawn_dbg.log").writeText("")
+                    spawnDbg(line + "\n")
+                }
+            }
+        }.apply { isDaemon = true; start() }
+        return p
+    }
+
+    /** 特权通道拉起常驻进程：Shizuku/Root 远程 shell 里 nohup 后台起，命令立即返回。
+     *  远程进程句柄拿不到，返回即刻退出的占位进程：探活交给调用方的 alive() 轮询
+     *  （服务真起来了就绪判定照样通过；没起来则按原有「未监听」路径提示日志） */
+    private fun spawnStartPrivileged(args: String): java.lang.Process? {
+        val bg = "nohup sh -c " + "'" + args.replace("'", "'\\''") + "' >/dev/null 2>&1 & echo SPAWN_BG=$!"
+        val r = privilegedRun(bg, 30_000L)
+        spawnDbg("[spawn] 特权通道: code=${r.code} out=${r.out.take(200)}\n")
+        return ProcessBuilder("/system/bin/true").start()
+    } //特权通道拉起
 
     /** 自检：能不能起来、apt 在不在 */
     fun selfTest(): ShellResult = run(
