@@ -255,9 +255,18 @@ object Linux {
         }
         return runCatching {
             val p = ProcessBuilder("/system/bin/sh", "-c", args).redirectErrorStream(true).start()
-            //读掉输出流防管道堵死（输出已由 guest 内部重定向到文件，这里只是排空）
-            Thread { runCatching { p.inputStream.bufferedReader().forEachLine { } } }
-                .apply { isDaemon = true; start() }
+            //排空输出防管道堵死；同时落到诊断文件：spawn 的报错用户看不见，排障全靠它
+            val dbg = File("/sdcard/BaiAgent/spawn_dbg.log")
+            Thread {
+                runCatching {
+                    dbg.parentFile?.mkdirs()
+                    dbg.appendText("---- ${java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date())} ----\n${args.take(260)}\n")
+                    p.inputStream.bufferedReader().forEachLine { line ->
+                        if (dbg.length() > 200_000) dbg.writeText("")
+                        dbg.appendText(line + "\n")
+                    }
+                }
+            }.apply { isDaemon = true; start() }
             p
         }.getOrNull()
     } //后台拉起长驻服务
