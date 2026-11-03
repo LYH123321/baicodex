@@ -105,6 +105,7 @@ import b.ai.core.Wallpaper
 import b.ai.core.WorkMode
 import b.ai.exec.Shiz
 import b.ai.exec.Ofm
+import b.ai.exec.BcGateway
 import b.ai.exec.Alarms
 import b.ai.exec.DevEnv
 import b.ai.exec.FChat
@@ -1774,6 +1775,7 @@ private fun LazyListScope.extTab(
         TavernSection()
         Spacer(Modifier.height(14.dp))
         OfmSection()
+        BcGatewaySection()
         Spacer(Modifier.height(14.dp))
         TerminalSection()
         Spacer(Modifier.height(14.dp))
@@ -3256,6 +3258,65 @@ private fun OfmSection() {
         }
     }
 } //ofm 免费模型网关卡
+
+@Composable
+private fun BcGatewaySection() {
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    var log by remember { mutableStateOf("") }
+    var ok by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        ok = withContext(Dispatchers.IO) { BcGateway.installed() && BcGateway.alive() }
+    }
+    SectionTitle("bc-gateway 智能调度网关", "多上游轮换·熔断·自动换批")
+    CardBox {
+        Text(
+            when {
+                !BcGateway.installed() -> "服务本体不在（/root/bc-gateway 缺失）"
+                ok -> "运行中：http://127.0.0.1:18750/v1（模型 auto）"
+                else -> "已安装，未运行"
+            },
+            fontSize = 13.sp,
+            color = when {
+                !BcGateway.installed() -> TextSecondary
+                ok -> OkGreen
+                else -> TextPrimary
+            }
+        )
+        if (log.isNotBlank()) {
+            Spacer(Modifier.height(6.dp))
+            Text(log, fontSize = 10.sp, color = TextSecondary)
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            GhostButton(if (busy) "处理中…" else "启动", modifier = Modifier.height(38.dp)) {
+                if (busy) return@GhostButton
+                busy = true
+                log = "启动中…"
+                scope.launch {
+                    ok = withContext(Dispatchers.IO) { BcGateway.start { l -> log = l } }
+                    busy = false
+                }
+            }
+            GhostButton("停止", modifier = Modifier.height(38.dp)) {
+                if (busy) return@GhostButton
+                busy = true
+                scope.launch {
+                    log = withContext(Dispatchers.IO) {
+                        var m = ""
+                        BcGateway.stop { l -> m = l }
+                        m
+                    }
+                    ok = false
+                    busy = false
+                }
+            }
+            GhostButton("日志", modifier = Modifier.height(38.dp)) {
+                scope.launch { log = withContext(Dispatchers.IO) { BcGateway.tail() } }
+            }
+        }
+    }
+} //bc-gateway 智能调度网关卡
 
 @Composable
 private fun TavernSection() {
